@@ -1,0 +1,45 @@
+name: Outage Watch
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Send a sample notification to my phone"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: outage-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Send test notification
+        if: ${{ inputs.test }}
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python outage_watch.py --test
+      - name: Check outages
+        if: ${{ !inputs.test }}
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python outage_watch.py
+      - name: Save state
+        if: ${{ !inputs.test }}
+        run: |
+          git config user.name "outage-watch-bot"
+          git config user.email "outage-watch-bot@users.noreply.github.com"
+          git add state.json
+          git diff --cached --quiet || (git commit -m "update outage state" -q && git push -q)
